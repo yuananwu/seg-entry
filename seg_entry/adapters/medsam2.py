@@ -37,8 +37,8 @@ class MedSam2Adapter(SegmentationAdapter):
         prompt_kinds=("bbox_2d", "points_2d", "diameter_line_2d"),
         service_contract_version=MODEL_STANDARD_VERSION,
         segmentation_output_format=SEGMENTATION_OUTPUT_FORMAT,
-        sidecar_formats=SIDECAR_FORMATS,
-        notes="Runs Medical-SAM2 3D prompt workflow and returns liver tumor mask plus diameter sidecar metadata.",
+        sidecar_formats=SIDECAR_FORMATS + ("png",),
+        notes="Runs Medical-SAM2 3D prompt workflow and returns liver tumor mask, prompt preview PNG, and diameter sidecar metadata.",
     )
 
     def validate_request(self, request: SegmentationRequest) -> None:
@@ -261,6 +261,30 @@ class MedSam2Adapter(SegmentationAdapter):
                     path=str(prompt_plan_path),
                     format="json",
                     description="Normalized prompts applied in MedSAM2 workflow",
+                )
+            )
+
+        prompt_render_index_path = exports_dir / "prompt_render_index.json"
+        if prompt_render_index_path.exists():
+            artifacts.append(
+                Artifact(
+                    name="prompt_render_index",
+                    role="native_metadata",
+                    path=str(prompt_render_index_path),
+                    format="json",
+                    description="Rendered prompt PNG index and primary preview pointer",
+                )
+            )
+
+        prompt_render_primary_path = exports_dir / "prompt_render_primary.png"
+        if prompt_render_primary_path.exists():
+            artifacts.append(
+                Artifact(
+                    name="prompt_render_primary",
+                    role="native_preview",
+                    path=str(prompt_render_primary_path),
+                    format="png",
+                    description="Prompt overlay preview on the source slice for coordinate sanity check",
                 )
             )
 

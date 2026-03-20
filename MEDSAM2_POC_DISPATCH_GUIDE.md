@@ -207,12 +207,16 @@ HTTP 入口同样走 `POST /segmentations`，请求体结构与 CLI 的 JSON 一
 - `<output_dir>/engine/medsam2/<case_id>/exports/liver_tumor.nii.gz`
 - `<output_dir>/engine/medsam2/<case_id>/exports/liver_tumor_diameter.json`
 - `<output_dir>/engine/medsam2/<case_id>/exports/prompt_plan.json`
+- `<output_dir>/engine/medsam2/<case_id>/exports/prompt_render_primary.png`
+- `<output_dir>/engine/medsam2/<case_id>/exports/prompt_render_index.json`
 
 其中：
 
 - `liver_tumor.nii.gz`: 主分割结果（标准分割 artifact）
 - `liver_tumor_diameter.json`: 基于预测掩码计算的最大径结果
 - `prompt_plan.json`: 归一化后的 prompt 落盘，便于回放和审计
+- `prompt_render_primary.png`: 你标注切片上的“切片+标注”直观预览图
+- `prompt_render_index.json`: 所有渲染 PNG 的索引及主预览指针
 
 ## 8. POC 阶段建议的 prompt 策略
 
