@@ -1,0 +1,19 @@
+{
+  "request_id": "demo-liver-medsam2-001",
+  "input_path": "/replace/with/your/case.nii.gz",
+  "input_type": "nifti_file",
+  "target": "liver",
+  "model": "medsam2",
+  "modality": "ct",
+  "output_dir": "/tmp/seg-entry-demo/demo-liver-medsam2-001",
+  "prompts": [
+    {
+      "kind": "bbox_2d",
+      "frame_index": 87,
+      "bbox": [160, 120, 350, 320],
+      "metadata": {
+        "source": "future_orthanc_ui"
+      }
+    }
+  ]
+}

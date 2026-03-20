@@ -1,0 +1,23 @@
+{
+  "request_id": "demo-liver-ct-001",
+  "input_path": "/replace/with/your/dicom_or_nii_path",
+  "input_type": "auto",
+  "target": "liver",
+  "model": "totalsegmentator",
+  "modality": "ct",
+  "output_dir": "/tmp/seg-entry-demo/demo-liver-ct-001",
+  "engine": {
+    "python_bin": "/home/gpu/miniconda3/envs/nnunet_py311/bin/python",
+    "device": "gpu",
+    "gpu_policy": "auto_best",
+    "gpu_candidates": "0,1,2,3,4,5,6,7",
+    "gpu_min_free_memory_mb": 4096,
+    "quiet": false,
+    "overwrite": false,
+    "export_mode": "copy",
+    "nr_thr_resamp": 1,
+    "nr_thr_saving": 1,
+    "totalseg_task_profile": "core_liver",
+    "totalseg_home": "/mnt/midstorage/user/wya/seg/TotalSegmentator/.totalsegmentator"
+  }
+}

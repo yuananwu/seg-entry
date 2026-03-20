@@ -1,0 +1,31 @@
+{
+  "request_id": "orthanc-liver-ct-20260319-0001",
+  "input_path": "/tmp/orthanc-export/orthanc-liver-ct-20260319-0001/dicom",
+  "input_type": "dicom_dir",
+  "target": "liver",
+  "model": "totalsegmentator",
+  "modality": "ct",
+  "output_dir": "/tmp/orthanc-seg-out/orthanc-liver-ct-20260319-0001",
+  "engine": {
+    "python_bin": "/home/gpu/miniconda3/envs/nnunet_py311/bin/python",
+    "device": "gpu",
+    "gpu_policy": "auto_best",
+    "gpu_candidates": "0,1,2,3,4,5,6,7",
+    "gpu_min_free_memory_mb": 4096,
+    "quiet": false,
+    "overwrite": false,
+    "export_mode": "copy",
+    "nr_thr_resamp": 1,
+    "nr_thr_saving": 1,
+    "totalseg_task_profile": "core_liver",
+    "totalseg_home": "/mnt/midstorage/user/wya/seg/TotalSegmentator/.totalsegmentator"
+  },
+  "metadata": {
+    "source_system": "orthanc",
+    "orthanc": {
+      "study_instance_uid": "1.2.840.xxx.study",
+      "series_instance_uid": "1.2.840.xxx.series",
+      "series_description": "Abdomen CT"
+    }
+  }
+}

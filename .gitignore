@@ -1,0 +1,23 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual env
+.venv/
+venv/
+
+# Build/test/cache
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Runtime outputs
+runs/
+
+# IDE/system
+.vscode/
+.idea/
+.DS_Store
