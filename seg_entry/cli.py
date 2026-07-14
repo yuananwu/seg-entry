@@ -28,8 +28,17 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser.add_argument("--request-id", help="Optional request id. Auto-generated if omitted.")
     run_parser.add_argument("--input-path", help="Path to a DICOM directory or NIfTI file.")
     run_parser.add_argument("--input-type", default="auto", choices=["auto", "nifti_file", "dicom_dir"])
-    run_parser.add_argument("--target", default="liver", help="Segmentation target. Current version supports liver only.")
-    run_parser.add_argument("--model", default="totalsegmentator", choices=["totalsegmentator", "medsam2"])
+    run_parser.add_argument(
+        "--target",
+        default="liver",
+        choices=["liver", "mr_abdomen_organs"],
+        help="Segmentation target.",
+    )
+    run_parser.add_argument(
+        "--model",
+        default="totalsegmentator",
+        choices=["totalsegmentator", "medsam2", "mrsegmentator"],
+    )
     run_parser.add_argument("--modality", choices=["ct", "mr"], help="Required for TotalSegmentator; optional metadata for MedSAM2.")
     run_parser.add_argument("--output-dir", help="Request output directory. Defaults to seg-entry/runs/<request_id>.")
     run_parser.add_argument("--prompt-json", help="Optional prompt JSON file for prompt-based models such as MedSAM2.")
@@ -59,6 +68,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Override MedSAM2 config (for example: configs/sam2.1_hiera_t512.yaml) or legacy Medical-SAM2 config (for example: sam2_hiera_s).",
     )
     run_parser.add_argument("--medsam2-image-size", type=int, help="Override MedSAM2 internal image size.")
+    run_parser.add_argument("--mrsegmentator-python-bin", help="Override MRSegmentator uv Python executable.")
+    run_parser.add_argument("--mrsegmentator-repo", help="Override MRSegmentator repository root.")
+    run_parser.add_argument("--mrsegmentator-runner", help="Override MRSegmentator runner path.")
+    run_parser.add_argument("--mrsegmentator-weights-root", help="Override MRSegmentator weights root.")
+    run_parser.add_argument("--mrsegmentator-fast", dest="mrsegmentator_fast", action="store_true", default=True)
+    run_parser.add_argument("--mrsegmentator-no-fast", dest="mrsegmentator_fast", action="store_false")
+    run_parser.add_argument("--mrsegmentator-fold", type=int, choices=range(5))
+    run_parser.add_argument("--mrsegmentator-split-level", type=int, default=0)
+    run_parser.add_argument("--mrsegmentator-split-margin", type=int, default=3)
+    run_parser.add_argument("--mrsegmentator-batchsize", type=int, default=1)
+    run_parser.add_argument("--mrsegmentator-nproc", type=int, default=3)
+    run_parser.add_argument("--mrsegmentator-nproc-export", type=int, default=4)
+    run_parser.add_argument("--mrsegmentator-export-empty", action="store_true")
     run_parser.add_argument("--quiet", action="store_true", help="Reduce engine console output.")
     run_parser.add_argument("--overwrite", action="store_true", help="Overwrite existing engine outputs.")
     run_parser.add_argument("--export-mode", default="copy", choices=["copy", "symlink"])
@@ -153,6 +175,18 @@ def _build_run_payload(args: argparse.Namespace) -> dict[str, Any]:
             "medsam2_ckpt": args.medsam2_ckpt,
             "medsam2_config": args.medsam2_config,
             "medsam2_image_size": args.medsam2_image_size,
+            "mrsegmentator_python_bin": args.mrsegmentator_python_bin,
+            "mrsegmentator_repo": args.mrsegmentator_repo,
+            "mrsegmentator_runner": args.mrsegmentator_runner,
+            "mrsegmentator_weights_root": args.mrsegmentator_weights_root,
+            "mrsegmentator_fast": args.mrsegmentator_fast,
+            "mrsegmentator_fold": args.mrsegmentator_fold,
+            "mrsegmentator_split_level": args.mrsegmentator_split_level,
+            "mrsegmentator_split_margin": args.mrsegmentator_split_margin,
+            "mrsegmentator_batchsize": args.mrsegmentator_batchsize,
+            "mrsegmentator_nproc": args.mrsegmentator_nproc,
+            "mrsegmentator_nproc_export": args.mrsegmentator_nproc_export,
+            "mrsegmentator_export_empty": args.mrsegmentator_export_empty,
         },
     }
     return payload

@@ -4,8 +4,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-SUPPORTED_MODELS = {"totalsegmentator", "medsam2"}
-SUPPORTED_TARGETS = {"liver"}
+SUPPORTED_MODELS = {"totalsegmentator", "medsam2", "mrsegmentator"}
+SUPPORTED_TARGETS = {"liver", "mr_abdomen_organs"}
 SUPPORTED_INPUT_TYPES = {"auto", "nifti_file", "dicom_dir"}
 SUPPORTED_MODALITIES = {"ct", "mr"}
 
@@ -77,6 +77,18 @@ class EngineConfig(SegEntryModel):
     medsam2_ckpt: Optional[str] = Field(default=None, alias="medsam2Ckpt")
     medsam2_config: Optional[str] = Field(default=None, alias="medsam2Config")
     medsam2_image_size: Optional[int] = Field(default=None, alias="medsam2ImageSize", ge=1)
+    mrsegmentator_python_bin: Optional[str] = Field(default=None, alias="mrsegmentatorPythonBin")
+    mrsegmentator_repo: Optional[str] = Field(default=None, alias="mrsegmentatorRepo")
+    mrsegmentator_runner: Optional[str] = Field(default=None, alias="mrsegmentatorRunner")
+    mrsegmentator_weights_root: Optional[str] = Field(default=None, alias="mrsegmentatorWeightsRoot")
+    mrsegmentator_fast: bool = Field(default=True, alias="mrsegmentatorFast")
+    mrsegmentator_fold: Optional[int] = Field(default=None, alias="mrsegmentatorFold", ge=0, le=4)
+    mrsegmentator_split_level: int = Field(default=0, alias="mrsegmentatorSplitLevel", ge=0)
+    mrsegmentator_split_margin: int = Field(default=3, alias="mrsegmentatorSplitMargin", ge=0)
+    mrsegmentator_batchsize: int = Field(default=1, alias="mrsegmentatorBatchsize", ge=1)
+    mrsegmentator_nproc: int = Field(default=3, alias="mrsegmentatorNproc", ge=1)
+    mrsegmentator_nproc_export: int = Field(default=4, alias="mrsegmentatorNprocExport", ge=1)
+    mrsegmentator_export_empty: bool = Field(default=False, alias="mrsegmentatorExportEmpty")
     extra: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("device", "gpu_policy", "export_mode", "totalseg_task_profile")

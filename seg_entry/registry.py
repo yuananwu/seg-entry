@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .adapters.base import SegmentationAdapter
 from .adapters.medsam2 import MedSam2Adapter
+from .adapters.mrsegmentator import MRSegmentatorAdapter
 from .adapters.totalsegmentator import TotalSegmentatorAdapter
 from .errors import SegEntryError
 
@@ -10,6 +11,7 @@ def build_registry() -> dict[str, SegmentationAdapter]:
     return {
         "totalsegmentator": TotalSegmentatorAdapter(),
         "medsam2": MedSam2Adapter(),
+        "mrsegmentator": MRSegmentatorAdapter(),
     }
 
 

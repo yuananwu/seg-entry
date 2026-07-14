@@ -1,0 +1,24 @@
+{
+  "request_id": "demo-mrsegmentator-mr-organs-001",
+  "input_path": "/replace/with/your/mr_dicom_or_nii_path",
+  "input_type": "auto",
+  "target": "mr_abdomen_organs",
+  "model": "mrsegmentator",
+  "modality": "mr",
+  "output_dir": "/tmp/seg-entry-demo/demo-mrsegmentator-mr-organs-001",
+  "engine": {
+    "device": "gpu",
+    "gpu_policy": "auto_best",
+    "gpu_candidates": "0,1,2,3,4,5,6,7",
+    "gpu_min_free_memory_mb": 4096,
+    "quiet": false,
+    "overwrite": false,
+    "export_mode": "copy",
+    "mrsegmentator_fast": true,
+    "mrsegmentator_split_level": 0,
+    "mrsegmentator_batchsize": 1,
+    "mrsegmentator_nproc": 3,
+    "mrsegmentator_nproc_export": 4,
+    "mrsegmentator_export_empty": false
+  }
+}

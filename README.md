@@ -20,9 +20,10 @@ Orthanc 对接规范见：
 
 ## 这一版的范围
 
-- 目标器官: `liver`
-- 生产可跑模型: `TotalSegmentator`
+- 目标: `liver`、`mr_abdomen_organs`
+- 生产可跑自动分割模型: `TotalSegmentator`
 - 可跑的 prompt 分割模型: `MedSAM2`
+- 可跑的 MR 多器官模型: `MRSegmentator`
 
 ## MedSAM2 当前状态
 
@@ -217,6 +218,56 @@ docker run --rm --gpus all -p 8010:8010 seg-entry:dev
 
 但 `MedSAM2_*.pt` 新权重不要再走这条旧路线。
 
+### 3. MRSegmentator MR 多器官
+
+MRSegmentator 通过自己的 uv 环境和 repo-local 权重运行，不复用
+TotalSegmentator 的 Python、runner、home 或 task profile。
+
+```json
+{
+  "request_id": "demo-mrsegmentator-mr-organs-001",
+  "input_path": "/path/to/mr_dicom_series_or_image.nii.gz",
+  "input_type": "auto",
+  "target": "mr_abdomen_organs",
+  "model": "mrsegmentator",
+  "modality": "mr",
+  "output_dir": "/tmp/seg-entry-demo/demo-mrsegmentator-mr-organs-001",
+  "engine": {
+    "device": "gpu",
+    "gpu_policy": "auto_best",
+    "gpu_candidates": "0,1,2,3,4,5,6,7",
+    "gpu_min_free_memory_mb": 4096,
+    "export_mode": "copy",
+    "mrsegmentator_fast": true,
+    "mrsegmentator_batchsize": 1,
+    "mrsegmentator_nproc": 3,
+    "mrsegmentator_nproc_export": 4
+  }
+}
+```
+
+标准示例文件：
+
+```text
+examples/request_mrsegmentator_mr_abdomen_organs.json
+```
+
+`target=mr_abdomen_organs` 时，主结果是 MRSegmentator 原生多标签：
+
+```text
+exports/mrsegmentator_multilabel.nii.gz
+```
+
+`target=liver` 时，主结果是二值肝脏 mask：
+
+```text
+exports/liver.nii.gz
+```
+
+MRSegmentator adapter 还会把 case summary、engine log 和各个非空器官
+二值 mask 作为 supporting artifacts 返回。`seg-entry` 不做 DICOM SEG 转换；
+多标签 NIfTI 到 multi-segment DICOM SEG 的转换由 `ai-orchestrator` 完成。
+
 ## CLI 用法
 
 ### 查看模型能力
@@ -280,6 +331,36 @@ python /mnt/midstorage/user/wya/seg/seg-entry/main.py run \
   --output-dir /tmp/seg-entry-demo/medsam2-request-001 \
   --pretty
 ```
+
+### 直接运行一个 MRSegmentator MR 多器官请求
+
+```bash
+python /mnt/midstorage/user/wya/seg/seg-entry/main.py run \
+  --request-json /mnt/midstorage/user/wya/seg/seg-entry/examples/request_mrsegmentator_mr_abdomen_organs.json \
+  --pretty
+```
+
+或者直接传关键参数：
+
+```bash
+python /mnt/midstorage/user/wya/seg/seg-entry/main.py run \
+  --input-path /path/to/mr_dicom_series_or_image.nii.gz \
+  --input-type auto \
+  --model mrsegmentator \
+  --target mr_abdomen_organs \
+  --modality mr \
+  --gpu-policy auto_best \
+  --gpu-candidates 0,1,2,3,4,5,6,7 \
+  --output-dir /tmp/seg-entry-demo/mrsegmentator-organs-001 \
+  --pretty
+```
+
+默认会使用：
+
+- `MRSegmentator/.venv/bin/python`
+- `MRSegmentator/scripts/run_liver_workflow.py`
+- `MRSegmentator/weights`
+- `mrsegmentator_fast=true`
 
 如果你想手工指定 GPU：
 
@@ -358,6 +439,12 @@ curl -X POST http://127.0.0.1:8010/segmentations \
 
 - 当 `engine.totalseg_task_profile=core_liver`（默认）时：`liver.nii.gz`
 - 当 `engine.totalseg_task_profile=full_liver` 时：`liver.nii.gz`、`liver_segment_1.nii.gz` 到 `liver_segment_8.nii.gz`
+
+对于 `MRSegmentator` MR 多器官，返回：
+
+- `target=mr_abdomen_organs`：`mrsegmentator_multilabel.nii.gz` 作为主结果
+- `target=liver`：`liver.nii.gz` 作为主结果
+- 非空器官二值 mask、`case.json` 和 `mrsegmentator.log` 作为辅助产物
 
 ## 推荐的 Orthanc 对接方式
 

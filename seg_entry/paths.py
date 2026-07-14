@@ -20,6 +20,10 @@ MEDICAL_SAM2_RUNNER = MEDICAL_SAM2_REPO / "scripts" / "run_liver_prompt_workflow
 MEDSAM2_REPO = WORKSPACE_ROOT / "MedSAM2"
 MEDSAM2_RUNNER = MEDSAM2_REPO / "scripts" / "run_liver_prompt_workflow.py"
 
+MRSEGMENTATOR_REPO = WORKSPACE_ROOT / "MRSegmentator"
+MRSEGMENTATOR_RUNNER = MRSEGMENTATOR_REPO / "scripts" / "run_liver_workflow.py"
+MRSEGMENTATOR_WEIGHTS_ROOT = MRSEGMENTATOR_REPO / "weights"
+
 KNOWN_ENGINE_PYTHONS = [
     Path("/home/gpu/miniconda3/envs/nnunet_py311/bin/python"),
     Path("/home/gpu/miniconda3/envs/medsam2/bin/python"),
@@ -28,6 +32,12 @@ KNOWN_ENGINE_PYTHONS = [
 
 MEDSAM2_ENGINE_PYTHONS = [
     Path("/home/gpu/miniconda3/envs/medsam2/bin/python"),
+    Path("/home/gpu/miniconda3/envs/nnunet_py311/bin/python"),
+    Path(sys.executable),
+]
+
+MRSEGMENTATOR_ENGINE_PYTHONS = [
+    MRSEGMENTATOR_REPO / ".venv" / "bin" / "python",
     Path("/home/gpu/miniconda3/envs/nnunet_py311/bin/python"),
     Path(sys.executable),
 ]
@@ -46,3 +56,7 @@ def default_engine_python() -> str:
 
 def default_medsam2_python() -> str:
     return str(_first_existing(MEDSAM2_ENGINE_PYTHONS))
+
+
+def default_mrsegmentator_python() -> str:
+    return str(_first_existing(MRSEGMENTATOR_ENGINE_PYTHONS))
