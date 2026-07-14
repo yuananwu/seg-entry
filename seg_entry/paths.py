@@ -14,11 +14,10 @@ TOTALSEG_REPO = WORKSPACE_ROOT / "TotalSegmentator"
 TOTALSEG_RUNNER = TOTALSEG_REPO / "scripts" / "run_liver_workflow.py"
 TOTALSEG_HOME = TOTALSEG_REPO / ".totalsegmentator"
 
-MEDSAM2_REPO_CANDIDATES = [
-    WORKSPACE_ROOT / "Medical-SAM2",
-    WORKSPACE_ROOT / "MedSAM2",
-]
-MEDSAM2_REPO = next((path for path in MEDSAM2_REPO_CANDIDATES if path.exists()), MEDSAM2_REPO_CANDIDATES[0])
+MEDICAL_SAM2_REPO = WORKSPACE_ROOT / "Medical-SAM2"
+MEDICAL_SAM2_RUNNER = MEDICAL_SAM2_REPO / "scripts" / "run_liver_prompt_workflow.py"
+
+MEDSAM2_REPO = WORKSPACE_ROOT / "MedSAM2"
 MEDSAM2_RUNNER = MEDSAM2_REPO / "scripts" / "run_liver_prompt_workflow.py"
 
 KNOWN_ENGINE_PYTHONS = [

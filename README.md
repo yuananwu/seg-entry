@@ -22,31 +22,37 @@ Orthanc 对接规范见：
 
 - 目标器官: `liver`
 - 生产可跑模型: `TotalSegmentator`
-- 预留接口模型: `MedSAM2`
+- 可跑的 prompt 分割模型: `MedSAM2`
 
-## 为什么 MedSAM2 先不直接打通
+## MedSAM2 当前状态
 
-MedSAM2 不是“只给图像就出结果”的模型，它依赖额外 prompt，比如：
+`medsam2` 现在已经在 `seg-entry` 中打通，支持：
 
-- 某一层的 `bbox`
-- 某一层的 `points`
-- `frame_index` / 关键切片
+- 输入类型: `dicom_dir`、`nifti_file`
+- 模态: `ct`、`mr`
+- prompt 类型: `bbox_2d`、`points_2d`、`diameter_line_2d`
+- 标准输出:
+  - `liver_tumor.nii.gz`
+  - `prompt_plan.json`
+  - `prompt_render_primary.png`
+  - `prompt_render_index.json`
+  - `case.json`
+  - `log_path`
 
-这意味着如果上游还没有把 prompt 的来源定好，比如：
+其中 `MedSAM2_*.pt` 新权重会优先走本工作区新增的 MedSAM2-compatible runner，而不是旧 `Medical-SAM2` runner。
 
-- Orthanc 前端手工框选
-- 测量线/标注转换
-- 其他模型先粗分割后自动生成 prompt
+推荐对 MRI liver lesion 明确传这组参数：
 
-那现在直接把 MedSAM2 做成生产入口，后面大概率会返工。
+- `medsam2_runner=medsam2_compat`
+- `medsam2_ckpt=/mnt/midstorage/user/wya/seg/MedSAM2/checkpoints/MedSAM2_MRI_LiverLesion.pt`
+- `medsam2_config=configs/sam2.1_hiera_t512.yaml`
+- `medsam2_image_size=512`
 
-所以这一版做法是：
+如果只传 `medsam2_ckpt=/path/to/MedSAM2_*.pt`，`seg-entry` 也会自动切到新 runner，并把旧的 `sam2_hiera_s` 之类参数归一化到兼容的 MedSAM2 config。
 
-- 在标准请求协议里正式纳入 `prompts`
-- 在模型注册里把 `medsam2` 标记为 `planned`
-- 先让 `TotalSegmentator` 作为稳定生产入口
+更细的调度说明见：
 
-这样未来要接 MedSAM2 时，只是补一个适配器实现，不用改总入口协议。
+- [MEDSAM2_POC_DISPATCH_GUIDE.md](/mnt/midstorage/user/wya/seg/seg-entry/MEDSAM2_POC_DISPATCH_GUIDE.md)
 
 ## 服务边界
 
@@ -68,12 +74,54 @@ seg-entry/
   examples/
   seg_entry/
     adapters/
+    api.py
     cli.py
     contracts.py
-    http_server.py
     inputs.py
     registry.py
     service.py
+```
+
+## 用 uv 管理环境
+
+在项目根目录执行：
+
+```bash
+cd /mnt/midstorage/user/wya/seg/seg-entry
+uv sync
+```
+
+常用命令（都走 `.venv`）：
+
+```bash
+uv run python main.py models --pretty
+uv run python main.py serve --host 0.0.0.0 --port 8010
+```
+
+更新依赖后，记得刷新锁文件：
+
+```bash
+uv lock
+```
+
+## Docker 化基础模板
+
+项目已提供 `Dockerfile`（多阶段构建）和 `.dockerignore`，可直接构建：
+
+```bash
+docker build -t seg-entry:dev .
+```
+
+启动服务：
+
+```bash
+docker run --rm -p 8010:8010 seg-entry:dev
+```
+
+如果要用 GPU（NVIDIA Container Toolkit 已就绪）：
+
+```bash
+docker run --rm --gpus all -p 8010:8010 seg-entry:dev
 ```
 
 ## 标准请求示例
@@ -106,31 +154,68 @@ seg-entry/
 }
 ```
 
-### 2. MedSAM2 未来协议示例
+### 2. MedSAM2 MRI liver lesion 示例
 
 ```json
 {
   "request_id": "demo-liver-medsam2-001",
-  "input_path": "/path/to/case.nii.gz",
-  "input_type": "nifti_file",
+  "input_path": "/path/to/dicom_or_nii",
+  "input_type": "dicom_dir",
   "target": "liver",
   "model": "medsam2",
-  "modality": "ct",
+  "modality": "mr",
   "output_dir": "/tmp/seg-entry-demo/demo-liver-medsam2-001",
   "prompts": [
     {
       "kind": "bbox_2d",
-      "frame_index": 87,
-      "bbox": [160, 120, 350, 320]
+      "frame_index": 9,
+      "bbox": [46, 74, 131, 145]
     }
-  ]
+  ],
+  "engine": {
+    "python_bin": "/home/gpu/miniconda3/envs/medsam2/bin/python",
+    "device": "gpu",
+    "gpu_policy": "auto_best",
+    "gpu_candidates": "0,1,2,3,4,5,6,7",
+    "gpu_min_free_memory_mb": 4096,
+    "export_mode": "copy",
+    "medsam2_runner": "medsam2_compat",
+    "medsam2_ckpt": "/mnt/midstorage/user/wya/seg/MedSAM2/checkpoints/MedSAM2_MRI_LiverLesion.pt",
+    "medsam2_config": "configs/sam2.1_hiera_t512.yaml",
+    "medsam2_image_size": 512
+  },
+  "metadata": {
+    "workflow": {
+      "task_preset": "mr_test",
+      "model_version": "MedSAM2_MRI_LiverLesion",
+      "result_target": "liver_tumor"
+    }
+  }
 }
 ```
 
-当前如果你传 `model=medsam2`，接口会明确告诉你：
+成功后会在 `response.json` 中返回：
 
-- prompt 协议已经准备好
-- 但 runnable engine hook 还没有正式启用
+- `status=succeeded`
+- `primary_artifact=<output_dir>/engine/medsam2/<case_id>/exports/liver_tumor.nii.gz`
+- `log_path=<output_dir>/logs/medsam2.log`
+
+并在 `artifacts` 中列出 prompt 计划、prompt 预览图和原生 case summary。
+
+如果你想继续复用旧 `Medical-SAM2` 路线，也可以显式传：
+
+```json
+{
+  "engine": {
+    "medsam2_runner": "medical_sam2_legacy",
+    "medsam2_ckpt": "/mnt/midstorage/user/wya/seg/Medical-SAM2/checkpoints/sam2_hiera_small.pt",
+    "medsam2_config": "sam2_hiera_s",
+    "medsam2_image_size": 1024
+  }
+}
+```
+
+但 `MedSAM2_*.pt` 新权重不要再走这条旧路线。
 
 ## CLI 用法
 
@@ -167,6 +252,34 @@ python /mnt/midstorage/user/wya/seg/seg-entry/main.py run \
 - 启动前检查 GPU 状态
 - 自动选择最合适的一张卡运行
 - `totalseg_task_profile=core_liver`（只导出 `liver.nii.gz`，更快）
+
+### 直接运行一个 MedSAM2 MRI 请求
+
+```bash
+python /mnt/midstorage/user/wya/seg/seg-entry/main.py run \
+  --request-json /path/to/request.json \
+  --pretty
+```
+
+或者直接传关键参数：
+
+```bash
+python /mnt/midstorage/user/wya/seg/seg-entry/main.py run \
+  --input-path /path/to/dicom_series \
+  --input-type dicom_dir \
+  --model medsam2 \
+  --modality mr \
+  --prompt-json /path/to/prompts.json \
+  --python-bin /home/gpu/miniconda3/envs/medsam2/bin/python \
+  --medsam2-runner medsam2_compat \
+  --medsam2-ckpt /mnt/midstorage/user/wya/seg/MedSAM2/checkpoints/MedSAM2_MRI_LiverLesion.pt \
+  --medsam2-config configs/sam2.1_hiera_t512.yaml \
+  --medsam2-image-size 512 \
+  --gpu-policy auto_best \
+  --gpu-candidates 0,1,2,3,4,5,6,7 \
+  --output-dir /tmp/seg-entry-demo/medsam2-request-001 \
+  --pretty
+```
 
 如果你想手工指定 GPU：
 

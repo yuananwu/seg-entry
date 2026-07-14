@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
 from .adapters.base import RunContext, SEGMENTATION_ARTIFACT_ROLES, SEGMENTATION_OUTPUT_FORMAT
 from .contracts import (
     EngineConfig,
@@ -15,7 +17,7 @@ from .contracts import (
     SegmentationRequest,
     SegmentationResponse,
 )
-from .errors import SegEntryError
+from .errors import SegEntryError, resolve_http_status
 from .inputs import detect_input_type, resolve_input_path, sanitize_name
 from .paths import DEFAULT_RUNS_ROOT
 from .registry import describe_models, get_adapter
@@ -31,12 +33,13 @@ class SegmentationService:
     def describe_models(self) -> list[dict[str, Any]]:
         return describe_models()
 
-    def execute(self, payload: dict[str, Any]) -> ServiceRunResult:
+    def execute(self, payload: dict[str, Any] | SegmentationRequest) -> ServiceRunResult:
         started_at = time.time()
-        bootstrap_request = self._bootstrap_request(payload)
+        payload_dict = self._payload_to_dict(payload)
+        bootstrap_request = self._bootstrap_request(payload_dict)
         active_request = bootstrap_request
         context = self._safe_build_context(bootstrap_request)
-        self._write_json(context.request_json_path, payload)
+        self._write_json(context.request_json_path, payload_dict)
 
         try:
             request = self._normalize_request(payload)
@@ -72,7 +75,7 @@ class SegmentationService:
             status_code = 200
         except SegEntryError as exc:
             response = self._build_error_response(active_request, context, started_at, exc)
-            status_code = exc.status
+            status_code = resolve_http_status(exc)
         except Exception as exc:  # pragma: no cover
             response = self._build_error_response(
                 active_request,
@@ -90,16 +93,14 @@ class SegmentationService:
         self._write_json(context.response_json_path, response.to_dict())
         return ServiceRunResult(response=response, status_code=status_code)
 
-    def _normalize_request(self, payload: dict[str, Any]) -> SegmentationRequest:
+    def _normalize_request(self, payload: dict[str, Any] | SegmentationRequest) -> SegmentationRequest:
         try:
-            request = SegmentationRequest.from_dict(payload)
-        except KeyError as exc:
-            raise SegEntryError(
-                "Missing required request field.",
-                code="missing_field",
-                status=400,
-                details={"field": str(exc)},
-            ) from exc
+            if isinstance(payload, SegmentationRequest):
+                request = payload.model_copy(deep=True)
+            else:
+                request = SegmentationRequest.model_validate(payload)
+        except ValidationError as exc:
+            raise self._validation_error_to_seg_entry_error(exc) from exc
         request.request_id = request.request_id or self._generate_request_id()
         request.request_id = sanitize_name(request.request_id)
         request.target = request.target.lower()
@@ -132,6 +133,10 @@ class SegmentationService:
         return request
 
     def _bootstrap_request(self, payload: dict[str, Any]) -> SegmentationRequest:
+        try:
+            engine = EngineConfig.model_validate(payload.get("engine") or {})
+        except ValidationError:
+            engine = EngineConfig()
         request_id = sanitize_name(str(payload.get("request_id") or self._generate_request_id()))
         output_dir = self._resolve_output_dir(request_id, payload.get("output_dir"))
         modality = payload.get("modality")
@@ -146,7 +151,7 @@ class SegmentationService:
             modality=modality,
             output_dir=output_dir,
             prompts=[],
-            engine=EngineConfig.from_dict(payload.get("engine")),
+            engine=engine,
             metadata=dict(payload.get("metadata", {})),
         )
 
@@ -242,3 +247,29 @@ class SegmentationService:
                         "format": artifact.format,
                     },
                 )
+
+    def _payload_to_dict(self, payload: dict[str, Any] | SegmentationRequest) -> dict[str, Any]:
+        if isinstance(payload, SegmentationRequest):
+            return payload.to_dict()
+        return dict(payload)
+
+    def _validation_error_to_seg_entry_error(self, error: ValidationError) -> SegEntryError:
+        errors = error.errors()
+        missing_fields = [
+            ".".join(str(part) for part in item.get("loc", ()))
+            for item in errors
+            if item.get("type") == "missing"
+        ]
+        if missing_fields:
+            return SegEntryError(
+                "Missing required request field.",
+                code="missing_field",
+                status=400,
+                details={"fields": missing_fields},
+            )
+        return SegEntryError(
+            "Invalid request payload.",
+            code="invalid_request",
+            status=400,
+            details={"errors": errors},
+        )

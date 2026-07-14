@@ -1,0 +1,11 @@
+.git
+.gitignore
+.venv
+venv
+__pycache__
+*.py[cod]
+*.log
+runs
+.pytest_cache
+.mypy_cache
+htmlcov

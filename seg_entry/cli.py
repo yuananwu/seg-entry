@@ -7,7 +7,6 @@ from typing import Any
 
 from .errors import SegEntryError
 from .gpu import build_gpu_status_payload
-from .http_server import run_server
 from .paths import DEFAULT_GPU_CANDIDATES
 from .service import SegmentationService
 
@@ -49,11 +48,17 @@ def build_parser() -> argparse.ArgumentParser:
         choices=["core_liver", "full_liver"],
         help="TotalSegmentator task profile: core_liver (liver only, faster) or full_liver (includes vessels/tumor/segments).",
     )
-    run_parser.add_argument("--medsam2-repo", help="Override Medical-SAM2 repository root.")
-    run_parser.add_argument("--medsam2-runner", help="Override Medical-SAM2 runner path.")
-    run_parser.add_argument("--medsam2-ckpt", help="Override Medical-SAM2 checkpoint path.")
-    run_parser.add_argument("--medsam2-config", help="Override Medical-SAM2 SAM config name (for example: sam2_hiera_s).")
-    run_parser.add_argument("--medsam2-image-size", type=int, help="Override Medical-SAM2 internal image size.")
+    run_parser.add_argument("--medsam2-repo", help="Override MedSAM2/Medical-SAM2 repository root.")
+    run_parser.add_argument(
+        "--medsam2-runner",
+        help="Override MedSAM2 runner path, or use runner aliases: medsam2_compat / medical_sam2_legacy.",
+    )
+    run_parser.add_argument("--medsam2-ckpt", help="Override MedSAM2/Medical-SAM2 checkpoint path.")
+    run_parser.add_argument(
+        "--medsam2-config",
+        help="Override MedSAM2 config (for example: configs/sam2.1_hiera_t512.yaml) or legacy Medical-SAM2 config (for example: sam2_hiera_s).",
+    )
+    run_parser.add_argument("--medsam2-image-size", type=int, help="Override MedSAM2 internal image size.")
     run_parser.add_argument("--quiet", action="store_true", help="Reduce engine console output.")
     run_parser.add_argument("--overwrite", action="store_true", help="Overwrite existing engine outputs.")
     run_parser.add_argument("--export-mode", default="copy", choices=["copy", "symlink"])
@@ -91,6 +96,8 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
     if args.command == "serve":
+        from .api import run_server
+
         run_server(host=args.host, port=args.port)
         return 0
 

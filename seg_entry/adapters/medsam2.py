@@ -9,7 +9,13 @@ from ..contracts import Artifact, SegmentationRequest
 from ..errors import SegEntryError
 from ..gpu import select_gpu
 from ..inputs import sanitize_name
-from ..paths import MEDSAM2_REPO, MEDSAM2_RUNNER, default_medsam2_python
+from ..paths import (
+    MEDICAL_SAM2_REPO,
+    MEDICAL_SAM2_RUNNER,
+    MEDSAM2_REPO,
+    MEDSAM2_RUNNER,
+    default_medsam2_python,
+)
 from .base import (
     AdapterResult,
     MODEL_STANDARD_VERSION,
@@ -22,8 +28,68 @@ from .base import (
 
 
 SUPPORTED_PROMPT_KINDS = {"bbox_2d", "points_2d", "diameter_line_2d"}
-DEFAULT_MEDSAM2_CONFIG = "sam2_hiera_s"
-DEFAULT_MEDSAM2_IMAGE_SIZE = 1024
+LEGACY_RUNNER_ALIAS = "medical_sam2_legacy"
+COMPAT_RUNNER_ALIAS = "medsam2_compat"
+
+LEGACY_DEFAULT_CONFIG = "sam2_hiera_s"
+LEGACY_DEFAULT_IMAGE_SIZE = 1024
+LEGACY_DEFAULT_CKPT = MEDICAL_SAM2_REPO / "checkpoints" / "sam2_hiera_small.pt"
+
+COMPAT_DEFAULT_CONFIG = "configs/sam2.1_hiera_t512.yaml"
+COMPAT_DEFAULT_IMAGE_SIZE = 512
+COMPAT_DEFAULT_CKPT = MEDSAM2_REPO / "checkpoints" / "MedSAM2_latest.pt"
+
+LEGACY_CONFIG_ALIASES = {"sam2_hiera_t", "sam2_hiera_s", "sam2_hiera_b+", "sam2_hiera_l"}
+COMPAT_CONFIG_ALIASES = {
+    "sam2.1_hiera_t512",
+    "sam2.1_hiera_t512.yaml",
+    "configs/sam2.1_hiera_t512.yaml",
+    "configs/sam2.1/sam2.1_hiera_t512.yaml",
+}
+
+
+def _path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _runner_selector_kind(value: str | None) -> str | None:
+    if not value:
+        return None
+    text = value.strip().lower()
+    if text == LEGACY_RUNNER_ALIAS:
+        return LEGACY_RUNNER_ALIAS
+    if text == COMPAT_RUNNER_ALIAS:
+        return COMPAT_RUNNER_ALIAS
+    return None
+
+
+def _is_medsam2_release_checkpoint(path: Path | None) -> bool:
+    if path is None:
+        return False
+    return path.name.startswith("MedSAM2_") and path.suffix == ".pt"
+
+
+def _normalize_compat_config(value: str | None) -> str:
+    if not value:
+        return COMPAT_DEFAULT_CONFIG
+
+    text = value.strip().replace("\\", "/")
+    basename = Path(text).name
+    stem = Path(basename).stem
+    if text in COMPAT_CONFIG_ALIASES or basename in COMPAT_CONFIG_ALIASES or stem in COMPAT_CONFIG_ALIASES:
+        return COMPAT_DEFAULT_CONFIG
+    if text in LEGACY_CONFIG_ALIASES or stem in LEGACY_CONFIG_ALIASES:
+        return COMPAT_DEFAULT_CONFIG
+    return text
+
+
+def _normalize_legacy_config(value: str | None) -> str:
+    text = (value or "").strip()
+    return text or LEGACY_DEFAULT_CONFIG
 
 
 class MedSam2Adapter(SegmentationAdapter):
@@ -38,7 +104,7 @@ class MedSam2Adapter(SegmentationAdapter):
         service_contract_version=MODEL_STANDARD_VERSION,
         segmentation_output_format=SEGMENTATION_OUTPUT_FORMAT,
         sidecar_formats=SIDECAR_FORMATS + ("png",),
-        notes="Runs Medical-SAM2 3D prompt workflow and returns liver tumor mask, prompt preview PNG, and diameter sidecar metadata.",
+        notes="Runs prompt-driven liver lesion segmentation via the legacy Medical-SAM2 workflow or the MedSAM2-compatible workflow, depending on the requested runner/checkpoint.",
     )
 
     def validate_request(self, request: SegmentationRequest) -> None:
@@ -105,24 +171,67 @@ class MedSam2Adapter(SegmentationAdapter):
     def run(self, request: SegmentationRequest, context: RunContext) -> AdapterResult:
         self.validate_request(request)
 
-        runner_path = Path(request.engine.medsam2_runner or MEDSAM2_RUNNER).expanduser().resolve()
+        explicit_runner_selector = _runner_selector_kind(request.engine.medsam2_runner)
+        explicit_runner_path = None
+        if request.engine.medsam2_runner and explicit_runner_selector is None:
+            explicit_runner_path = Path(request.engine.medsam2_runner).expanduser().resolve()
+
+        explicit_repo_root = None
+        if request.engine.medsam2_repo:
+            explicit_repo_root = Path(request.engine.medsam2_repo).expanduser().resolve()
+
+        requested_ckpt = None
+        if request.engine.medsam2_ckpt:
+            requested_ckpt = Path(request.engine.medsam2_ckpt).expanduser().resolve()
+
+        use_compat_runner = False
+        if explicit_runner_selector == COMPAT_RUNNER_ALIAS:
+            use_compat_runner = True
+        elif explicit_runner_selector == LEGACY_RUNNER_ALIAS:
+            use_compat_runner = False
+        elif explicit_runner_path is not None:
+            if explicit_runner_path == MEDSAM2_RUNNER or _path_is_within(explicit_runner_path, MEDSAM2_REPO):
+                use_compat_runner = True
+            elif explicit_runner_path == MEDICAL_SAM2_RUNNER or _path_is_within(explicit_runner_path, MEDICAL_SAM2_REPO):
+                use_compat_runner = False
+        elif explicit_repo_root is not None:
+            if explicit_repo_root == MEDSAM2_REPO or _path_is_within(explicit_repo_root, MEDSAM2_REPO):
+                use_compat_runner = True
+            elif explicit_repo_root == MEDICAL_SAM2_REPO or _path_is_within(explicit_repo_root, MEDICAL_SAM2_REPO):
+                use_compat_runner = False
+        elif _is_medsam2_release_checkpoint(requested_ckpt):
+            use_compat_runner = True
+
+        if explicit_runner_selector == COMPAT_RUNNER_ALIAS:
+            runner_path = MEDSAM2_RUNNER
+        elif explicit_runner_selector == LEGACY_RUNNER_ALIAS:
+            runner_path = MEDICAL_SAM2_RUNNER
+        elif explicit_runner_path is not None:
+            runner_path = explicit_runner_path
+        else:
+            runner_path = MEDSAM2_RUNNER if use_compat_runner else MEDICAL_SAM2_RUNNER
+
         if not runner_path.exists():
             raise SegEntryError(
-                f"Medical-SAM2 runner not found: {runner_path}",
+                f"MedSAM2 runner not found: {runner_path}",
                 code="medsam2_runner_not_found",
                 status=500,
             )
 
-        repo_root = Path(request.engine.medsam2_repo or MEDSAM2_REPO).expanduser().resolve()
-        sam_ckpt = Path(
-            request.engine.medsam2_ckpt or (repo_root / "checkpoints" / "sam2_hiera_small.pt")
-        ).expanduser().resolve()
-        sam_config = request.engine.medsam2_config or DEFAULT_MEDSAM2_CONFIG
-        image_size = request.engine.medsam2_image_size or DEFAULT_MEDSAM2_IMAGE_SIZE
+        repo_root = explicit_repo_root or (MEDSAM2_REPO if use_compat_runner else MEDICAL_SAM2_REPO)
+        sam_ckpt = requested_ckpt or (COMPAT_DEFAULT_CKPT if use_compat_runner else LEGACY_DEFAULT_CKPT)
+        sam_config = (
+            _normalize_compat_config(request.engine.medsam2_config)
+            if use_compat_runner
+            else _normalize_legacy_config(request.engine.medsam2_config)
+        )
+        image_size = request.engine.medsam2_image_size or (
+            COMPAT_DEFAULT_IMAGE_SIZE if use_compat_runner else LEGACY_DEFAULT_IMAGE_SIZE
+        )
 
         if not sam_ckpt.exists():
             raise SegEntryError(
-                f"Medical-SAM2 checkpoint not found: {sam_ckpt}",
+                f"MedSAM2 checkpoint not found: {sam_ckpt}",
                 code="medsam2_ckpt_not_found",
                 status=500,
             )
@@ -318,10 +427,14 @@ class MedSam2Adapter(SegmentationAdapter):
                 "engine_summary": case_summary,
                 "prompt_policy": "required",
                 "prompt_count": len(request.prompts),
+                "runner_family": "medsam2_compat" if use_compat_runner else "medical_sam2_legacy",
+                "runner_path": str(runner_path),
+                "repo_root": str(repo_root),
                 "sam": {
                     "checkpoint": str(sam_ckpt),
-                    "config": sam_config,
-                    "image_size": int(image_size),
+                    "config": case_summary.get("sam_config", sam_config),
+                    "image_size": int(case_summary.get("image_size", image_size)),
+                    "requested_image_size": int(image_size),
                 },
                 "execution": execution_metadata,
             },

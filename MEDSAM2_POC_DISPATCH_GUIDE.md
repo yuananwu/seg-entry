@@ -29,6 +29,7 @@
 
 5. 引擎参数不同
 - `medsam2` 额外支持: `medsam2_runner`、`medsam2_ckpt`、`medsam2_config`、`medsam2_image_size`。
+- 对于 `MedSAM2_*.pt` 新权重，推荐显式传 `medsam2_runner=medsam2_compat`，避免误走旧 `Medical-SAM2` 路线。
 
 ## 3. 调度入口（seg-entry）
 
@@ -179,10 +180,10 @@ HTTP 入口同样走 `POST /segmentations`，请求体结构与 CLI 的 JSON 一
     "gpu_policy": "auto_best",
     "gpu_candidates": "0,1,2,3,4,5,6,7",
     "gpu_min_free_memory_mb": 4096,
-    "medsam2_runner": "/mnt/midstorage/user/wya/seg/Medical-SAM2/scripts/run_liver_prompt_workflow.py",
-    "medsam2_ckpt": "/mnt/midstorage/user/wya/seg/Medical-SAM2/checkpoints/sam2_hiera_small.pt",
-    "medsam2_config": "sam2_hiera_s",
-    "medsam2_image_size": 1024
+    "medsam2_runner": "medsam2_compat",
+    "medsam2_ckpt": "/mnt/midstorage/user/wya/seg/MedSAM2/checkpoints/MedSAM2_MRI_LiverLesion.pt",
+    "medsam2_config": "configs/sam2.1_hiera_t512.yaml",
+    "medsam2_image_size": 512
   }
 }
 ```
@@ -194,7 +195,7 @@ HTTP 入口同样走 `POST /segmentations`，请求体结构与 CLI 的 JSON 一
 1. `SegmentationService.execute`
 2. `MedSam2Adapter.validate_request`
 3. `MedSam2Adapter.run`（写 `plans/medsam2_case.json`）
-4. 子进程调用 `Medical-SAM2/scripts/run_liver_prompt_workflow.py _worker`
+4. 子进程调用 `MedSAM2/scripts/run_liver_prompt_workflow.py _worker`
 5. `local_workflow.run_case -> run_task -> run_prompt_inference`
 6. 输出 `engine/medsam2/<case_id>/tasks/...` 并导出到 `exports/`
 
